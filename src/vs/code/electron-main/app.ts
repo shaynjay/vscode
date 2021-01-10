@@ -3,7 +3,7 @@
  *  Licensed under the MIT License. See License.txt in the project root for license information.
  *--------------------------------------------------------------------------------------------*/
 
-import { app, ipcMain, systemPreferences, contentTracing, protocol, BrowserWindow, dialog, session } from 'electron';
+import { app, ipcMain, systemPreferences, contentTracing, protocol, BrowserWindow, dialog, session, MessageChannelMain } from 'electron';
 import { IProcessEnvironment, isWindows, isMacintosh, isLinux, isLinuxSnap } from 'vs/base/common/platform';
 import { WindowsMainService } from 'vs/platform/windows/electron-main/windowsMainService';
 import { IWindowOpenable } from 'vs/platform/windows/common/windows';
@@ -12,8 +12,8 @@ import { resolveShellEnv } from 'vs/code/node/shellEnv';
 import { IUpdateService } from 'vs/platform/update/common/update';
 import { UpdateChannel } from 'vs/platform/update/electron-main/updateIpc';
 import { Server as ElectronIPCServer } from 'vs/base/parts/ipc/electron-main/ipc.electron-main';
-import { Client } from 'vs/base/parts/ipc/common/ipc.net';
-import { Server, connect } from 'vs/base/parts/ipc/node/ipc.net';
+import { Client } from 'vs/base/parts/ipc/electron-main/ipc.dom';
+import { Server } from 'vs/base/parts/ipc/node/ipc.net';
 import { SharedProcess } from 'vs/code/electron-main/sharedProcess';
 import { LaunchMainService, ILaunchMainService } from 'vs/platform/launch/electron-main/launchMainService';
 import { IInstantiationService, ServicesAccessor } from 'vs/platform/instantiation/common/instantiation';
@@ -426,13 +426,17 @@ export class CodeApplication extends Disposable {
 
 		// Spawn shared process after the first window has opened and 3s have passed
 		const sharedProcess = this.instantiationService.createInstance(SharedProcess, machineId, this.userEnv);
-		const sharedProcessClient = sharedProcess.whenIpcReady().then(() => {
-			this.logService.trace('Shared process: IPC ready');
+		const sharedProcessClient = (async () => {
+			await sharedProcess.whenIpcReady();
+			const { port1, port2 } = new MessageChannelMain();
 
-			return connect(this.environmentService.sharedIPCHandle, 'main');
-		});
+			console.log("shared process connect")
+			await sharedProcess.connect(port2);
+
+			return new Client(port1);
+		})();
 		const sharedProcessReady = sharedProcess.whenReady().then(() => {
-			this.logService.trace('Shared process: init ready');
+			console.log('Shared process: init ready');
 
 			return sharedProcessClient;
 		});
@@ -482,7 +486,7 @@ export class CodeApplication extends Disposable {
 		return machineId;
 	}
 
-	private async createServices(machineId: string, sharedProcess: SharedProcess, sharedProcessReady: Promise<Client<string>>): Promise<IInstantiationService> {
+	private async createServices(machineId: string, sharedProcess: SharedProcess, sharedProcessReady: Promise<Client>): Promise<IInstantiationService> {
 		const services = new ServiceCollection();
 
 		switch (process.platform) {
@@ -584,7 +588,7 @@ export class CodeApplication extends Disposable {
 		});
 	}
 
-	private openFirstWindow(accessor: ServicesAccessor, electronIpcServer: ElectronIPCServer, sharedProcessClient: Promise<Client<string>>, fileProtocolHandler: FileProtocolHandler): ICodeWindow[] {
+	private openFirstWindow(accessor: ServicesAccessor, electronIpcServer: ElectronIPCServer, sharedProcessClient: Promise<Client>, fileProtocolHandler: FileProtocolHandler): ICodeWindow[] {
 
 		// Register more Main IPC services
 		const launchMainService = accessor.get(ILaunchMainService);

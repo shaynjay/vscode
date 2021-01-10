@@ -3,6 +3,7 @@
  *  Licensed under the MIT License. See License.txt in the project root for license information.
  *--------------------------------------------------------------------------------------------*/
 
+import { ipcMain, MessagePortMain } from 'electron';
 import { createDecorator } from 'vs/platform/instantiation/common/instantiation';
 
 export const ISharedProcessMainService = createDecorator<ISharedProcessMainService>('sharedProcessMainService');
@@ -17,6 +18,7 @@ export interface ISharedProcessMainService {
 
 export interface ISharedProcess {
 	whenReady(): Promise<void>;
+	connect(port: MessagePortMain): Promise<void>;
 	toggle(): void;
 }
 
@@ -24,9 +26,14 @@ export class SharedProcessMainService implements ISharedProcessMainService {
 
 	declare readonly _serviceBrand: undefined;
 
-	constructor(private sharedProcess: ISharedProcess) { }
+	constructor(private sharedProcess: ISharedProcess) {
+		ipcMain.on('vscode:sharedProcessConnect', e => {
+			sharedProcess.connect(e.ports[0]);
+		});
+	}
 
 	whenSharedProcessReady(): Promise<void> {
+		console.log("whenSharedProcessReady", new Error().stack)
 		return this.sharedProcess.whenReady();
 	}
 

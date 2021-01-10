@@ -21,6 +21,8 @@ import { ServicesAccessor } from 'vs/platform/instantiation/common/instantiation
 import { IConfigurationService } from 'vs/platform/configuration/common/configuration';
 import { INativeHostService } from 'vs/platform/native/electron-sandbox/native';
 import { Codicon } from 'vs/base/common/codicons';
+import { IDiagnosticsService } from 'vs/platform/diagnostics/node/diagnosticsService';
+import { ILocalizationsService } from 'vs/platform/localizations/common/localizations';
 
 export class CloseCurrentWindowAction extends Action {
 
@@ -30,13 +32,15 @@ export class CloseCurrentWindowAction extends Action {
 	constructor(
 		id: string,
 		label: string,
-		@INativeHostService private readonly nativeHostService: INativeHostService
+		@ILocalizationsService private readonly localizationsService: ILocalizationsService
 	) {
 		super(id, label);
 	}
 
 	async run(): Promise<void> {
-		this.nativeHostService.closeWindow();
+		// this.nativeHostService.closeWindow();
+		const res = await this.localizationsService.getLanguageIds();
+		console.log(res);
 	}
 }
 
@@ -130,15 +134,16 @@ export class ReloadWindowWithExtensionsDisabledAction extends Action {
 	constructor(
 		id: string,
 		label: string,
-		@INativeHostService private readonly nativeHostService: INativeHostService
+		@ILocalizationsService private readonly localizationsService: ILocalizationsService
 	) {
 		super(id, label);
 	}
 
-	async run(): Promise<boolean> {
-		await this.nativeHostService.reload({ disableExtensions: true });
-
-		return true;
+	async run(): Promise<void> {
+		// this.nativeHostService.closeWindow();
+		console.log("before");
+		const res = await this.localizationsService.getLanguageIds();
+		console.log("after", res);
 	}
 }
 

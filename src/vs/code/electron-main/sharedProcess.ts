@@ -3,9 +3,9 @@
  *  Licensed under the MIT License. See License.txt in the project root for license information.
  *--------------------------------------------------------------------------------------------*/
 
+import { BrowserWindow, ipcMain, WebContents, Event as ElectronEvent, MessagePortMain } from 'electron';
 import { memoize } from 'vs/base/common/decorators';
 import { IEnvironmentMainService } from 'vs/platform/environment/electron-main/environmentMainService';
-import { BrowserWindow, ipcMain, WebContents, Event as ElectronEvent } from 'electron';
 import { ISharedProcess } from 'vs/platform/ipc/electron-main/sharedProcessMainService';
 import { Barrier } from 'vs/base/common/async';
 import { ILogService } from 'vs/platform/log/common/log';
@@ -21,6 +21,8 @@ export class SharedProcess implements ISharedProcess {
 	private readonly barrier = new Barrier();
 	private readonly _whenReady: Promise<void>;
 
+	private readonly pendingPorts: MessagePortMain[] = [];
+
 	private window: BrowserWindow | null = null;
 
 	constructor(
@@ -32,7 +34,7 @@ export class SharedProcess implements ISharedProcess {
 		@IThemeMainService private readonly themeMainService: IThemeMainService
 	) {
 		// overall ready promise when shared process signals initialization is done
-		this._whenReady = new Promise<void>(c => ipcMain.once('vscode:shared-process->electron-main=init-done', () => c(undefined)));
+		this._whenReady = new Promise<void>(resolve => ipcMain.once('vscode:shared-process->electron-main=init-done', () => resolve(undefined)));
 	}
 
 	@memoize
@@ -53,6 +55,8 @@ export class SharedProcess implements ISharedProcess {
 				disableBlinkFeatures: 'Auxclick' // do NOT change, allows us to identify this window as shared-process in the process explorer
 			}
 		});
+
+		console.log("Yes shared process window")
 
 		const config = {
 			appRoot: this.environmentService.appRoot,
@@ -112,6 +116,11 @@ export class SharedProcess implements ISharedProcess {
 			}, 0);
 		});
 
+		while (this.pendingPorts.length) {
+			console.log("releasing pending ports")
+			this.window.webContents.postMessage('vscode:sharedProcessAcceptConnection', null, [this.pendingPorts.pop()!]);
+		}
+
 		return new Promise<void>(resolve => {
 
 			// send payload once shared process is ready to receive it
@@ -139,8 +148,11 @@ export class SharedProcess implements ISharedProcess {
 	}
 
 	async whenReady(): Promise<void> {
+		console.log("await barrier");
 		await this.barrier.wait();
+		console.log("await whenReady");
 		await this._whenReady;
+		console.log("done ready");
 	}
 
 	async whenIpcReady(): Promise<void> {
@@ -153,6 +165,17 @@ export class SharedProcess implements ISharedProcess {
 			this.hide();
 		} else {
 			this.show();
+		}
+	}
+
+	async connect(port: MessagePortMain): Promise<void> {
+		// await this.whenIpcReady();
+
+		if (this.window) {
+			this.window.webContents.postMessage('vscode:sharedProcessAcceptConnection', null, [port]);
+		} else {
+			console.log("adding to pending ports")
+			this.pendingPorts.push(port);
 		}
 	}
 

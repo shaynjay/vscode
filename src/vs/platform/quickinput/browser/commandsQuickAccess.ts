@@ -222,7 +222,7 @@ export class CommandsHistory extends Disposable {
 		if (CommandsHistory.cache && CommandsHistory.cache.limit !== this.configuredCommandsHistoryLength) {
 			CommandsHistory.cache.limit = this.configuredCommandsHistoryLength;
 
-			CommandsHistory.saveState(this.storageService);
+			// CommandsHistory.saveState(this.storageService);
 		}
 	}
 
@@ -258,7 +258,7 @@ export class CommandsHistory extends Disposable {
 
 		CommandsHistory.cache.set(commandId, CommandsHistory.counter++); // set counter to command
 
-		CommandsHistory.saveState(this.storageService);
+		// CommandsHistory.saveState(this.storageService);
 	}
 
 	peek(commandId: string): number | undefined {

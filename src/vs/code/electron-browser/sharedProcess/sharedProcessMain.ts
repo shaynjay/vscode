@@ -3,10 +3,8 @@
  *  Licensed under the MIT License. See License.txt in the project root for license information.
  *--------------------------------------------------------------------------------------------*/
 
-import * as fs from 'fs';
-import * as platform from 'vs/base/common/platform';
 import product from 'vs/platform/product/common/product';
-import { serve, Server, connect } from 'vs/base/parts/ipc/node/ipc.net';
+import { Server } from 'vs/base/parts/ipc/electron-sandbox/ipc.dom';
 import { ServiceCollection } from 'vs/platform/instantiation/common/serviceCollection';
 import { SyncDescriptor } from 'vs/platform/instantiation/common/descriptors';
 import { InstantiationService } from 'vs/platform/instantiation/common/instantiationService';
@@ -143,11 +141,11 @@ async function main(server: Server, initData: ISharedProcessInitData, configurat
 	// Configuration
 	const configurationService = new ConfigurationService(environmentService.settingsResource, fileService);
 	disposables.add(configurationService);
-	await configurationService.initialize();
+	// await configurationService.initialize();
 
 	// Storage
 	const storageService = new NativeStorageService(new GlobalStorageDatabaseChannelClient(mainProcessService.getChannel('storage')), logService, environmentService);
-	await storageService.initialize();
+	// await storageService.initialize();
 	services.set(IStorageService, storageService);
 	disposables.add(toDisposable(() => storageService.flush()));
 
@@ -276,55 +274,28 @@ async function main(server: Server, initData: ISharedProcessInitData, configurat
 	});
 }
 
-function setupIPC(hook: string): Promise<Server> {
-	function setup(retry: boolean): Promise<Server> {
-		return serve(hook).then(null, err => {
-			if (!retry || platform.isWindows || err.code !== 'EADDRINUSE') {
-				return Promise.reject(err);
-			}
-
-			// should retry, not windows and eaddrinuse
-
-			return connect(hook, '').then(
-				client => {
-					// we could connect to a running instance. this is not good, abort
-					client.dispose();
-					return Promise.reject(new Error('There is an instance already running.'));
-				},
-				err => {
-					// it happens on Linux and OS X that the pipe is left behind
-					// let's delete it, since we can't connect to it
-					// and the retry the whole thing
-					try {
-						fs.unlinkSync(hook);
-					} catch (e) {
-						return Promise.reject(new Error('Error deleting the shared ipc hook.'));
-					}
-
-					return setup(false);
-				}
-			);
-		});
-	}
-
-	return setup(true);
-}
-
 async function handshake(configuration: ISharedProcessConfiguration): Promise<void> {
 
 	// receive payload from electron-main to start things
-	const data = await new Promise<ISharedProcessInitData>(c => {
-		ipcRenderer.once('vscode:electron-main->shared-process=payload', (event: unknown, r: ISharedProcessInitData) => c(r));
+	const data = await new Promise<ISharedProcessInitData>(resolve => {
+		ipcRenderer.once('vscode:electron-main->shared-process=payload', (event: unknown, payload: ISharedProcessInitData) => resolve(payload));
 
 		// tell electron-main we are ready to receive payload
 		ipcRenderer.send('vscode:shared-process->electron-main=ready-for-payload');
 	});
 
 	// await IPC connection and signal this back to electron-main
-	const server = await setupIPC(data.sharedIPCHandle);
+	const server = new Server();
 	ipcRenderer.send('vscode:shared-process->electron-main=ipc-ready');
 
+	console.log(1);
+
 	// await initialization and signal this back to electron-main
-	await main(server, data, configuration);
+	try {
+		await main(server, data, configuration);
+	} catch (error) {
+		console.error(error);
+	}
+	console.log(2);
 	ipcRenderer.send('vscode:shared-process->electron-main=init-done');
 }
